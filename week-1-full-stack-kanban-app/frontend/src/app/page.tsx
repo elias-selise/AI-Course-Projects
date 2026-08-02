@@ -17,6 +17,7 @@ import { INITIAL_COLUMNS, Column, CardItem } from "@/types/kanban";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCard } from "@/components/KanbanCard";
 import { LoginForm } from "@/components/LoginForm";
+import { AiChatSidebar } from "@/components/AiChatSidebar";
 import { LayoutGrid, LogOut } from "lucide-react";
 
 export default function KanbanBoard() {
@@ -33,16 +34,48 @@ export default function KanbanBoard() {
           const data = await res.json();
           if (data.authenticated) {
             setIsAuthenticated(true);
+            fetchBoard();
             return;
           }
         }
       } catch (err) {
         // Fallback to client-side storage state
       }
-      setIsAuthenticated(localStorage.getItem("kanban_authenticated") === "true");
+      const localAuth = localStorage.getItem("kanban_authenticated") === "true";
+      setIsAuthenticated(localAuth);
+      if (localAuth) {
+        fetchBoard();
+      }
     }
     checkAuth();
   }, []);
+
+  const fetchBoard = async () => {
+    try {
+      const res = await fetch("/api/board");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.columns && Array.isArray(data.columns)) {
+          setColumns(data.columns);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch board state", err);
+    }
+  };
+
+  const saveBoard = async (newColumns: Column[]) => {
+    setColumns(newColumns);
+    try {
+      await fetch("/api/board", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ columns: newColumns }),
+      });
+    } catch (err) {
+      console.error("Failed to save board state", err);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -63,9 +96,10 @@ export default function KanbanBoard() {
   );
 
   const handleRenameColumn = (columnId: string, newTitle: string) => {
-    setColumns((prev) =>
-      prev.map((col) => (col.id === columnId ? { ...col, title: newTitle } : col))
+    const updated = columns.map((col) =>
+      col.id === columnId ? { ...col, title: newTitle } : col
     );
+    saveBoard(updated);
   };
 
   const handleAddCard = (columnId: string, title: string, details: string) => {
@@ -74,21 +108,19 @@ export default function KanbanBoard() {
       title,
       details,
     };
-    setColumns((prev) =>
-      prev.map((col) =>
-        col.id === columnId ? { ...col, cards: [...col.cards, newCard] } : col
-      )
+    const updated = columns.map((col) =>
+      col.id === columnId ? { ...col, cards: [...col.cards, newCard] } : col
     );
+    saveBoard(updated);
   };
 
   const handleDeleteCard = (columnId: string, cardId: string) => {
-    setColumns((prev) =>
-      prev.map((col) =>
-        col.id === columnId
-          ? { ...col, cards: col.cards.filter((c) => c.id !== cardId) }
-          : col
-      )
+    const updated = columns.map((col) =>
+      col.id === columnId
+        ? { ...col, cards: col.cards.filter((c) => c.id !== cardId) }
+        : col
     );
+    saveBoard(updated);
   };
 
   const findColumnOfCard = (cardId: string): Column | undefined => {
@@ -124,26 +156,25 @@ export default function KanbanBoard() {
 
     if (!activeCol || !overCol || activeCol.id === overCol.id) return;
 
-    setColumns((prev) => {
-      const sourceCards = [...activeCol.cards];
-      const destCards = [...overCol!.cards];
+    const sourceCards = [...activeCol.cards];
+    const destCards = [...overCol!.cards];
 
-      const activeIndex = sourceCards.findIndex((c) => c.id === activeId);
-      const [movedCard] = sourceCards.splice(activeIndex, 1);
+    const activeIndex = sourceCards.findIndex((c) => c.id === activeId);
+    const [movedCard] = sourceCards.splice(activeIndex, 1);
 
-      const overIndex = destCards.findIndex((c) => c.id === overId);
-      if (overIndex >= 0) {
-        destCards.splice(overIndex, 0, movedCard);
-      } else {
-        destCards.push(movedCard);
-      }
+    const overIndex = destCards.findIndex((c) => c.id === overId);
+    if (overIndex >= 0) {
+      destCards.splice(overIndex, 0, movedCard);
+    } else {
+      destCards.push(movedCard);
+    }
 
-      return prev.map((col) => {
-        if (col.id === activeCol.id) return { ...col, cards: sourceCards };
-        if (col.id === overCol!.id) return { ...col, cards: destCards };
-        return col;
-      });
+    const updated = columns.map((col) => {
+      if (col.id === activeCol.id) return { ...col, cards: sourceCards };
+      if (col.id === overCol!.id) return { ...col, cards: destCards };
+      return col;
     });
+    setColumns(updated);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -163,13 +194,14 @@ export default function KanbanBoard() {
     const overIndex = activeCol.cards.findIndex((c) => c.id === overId);
 
     if (activeIndex !== overIndex && overIndex !== -1) {
-      setColumns((prev) =>
-        prev.map((col) =>
-          col.id === activeCol.id
-            ? { ...col, cards: arrayMove(col.cards, activeIndex, overIndex) }
-            : col
-        )
+      const updated = columns.map((col) =>
+        col.id === activeCol.id
+          ? { ...col, cards: arrayMove(col.cards, activeIndex, overIndex) }
+          : col
       );
+      saveBoard(updated);
+    } else {
+      saveBoard(columns);
     }
   };
 
@@ -182,9 +214,9 @@ export default function KanbanBoard() {
   }
 
   return (
-    <main className="min-h-screen flex flex-col bg-[#032147] text-slate-100 selection:bg-[#ecad0a] selection:text-slate-900">
+    <main className="h-screen w-screen flex flex-col bg-[#032147] text-slate-100 selection:bg-[#ecad0a] selection:text-slate-900 overflow-hidden">
       {/* Header */}
-      <header className="border-b border-slate-700/60 bg-slate-950/40 px-8 py-5 backdrop-blur-lg">
+      <header className="shrink-0 border-b border-slate-700/60 bg-slate-950/40 px-8 py-4 backdrop-blur-lg">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-gradient-to-tr from-[#753991] to-[#209dd7] p-2.5 shadow-lg shadow-[#753991]/20">
@@ -214,39 +246,45 @@ export default function KanbanBoard() {
         </div>
       </header>
 
-      {/* Board Content */}
-      <div className="flex-1 p-8 overflow-x-auto">
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCorners}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDragEnd={handleDragEnd}
-        >
-          <div className="flex items-start gap-6 pb-6 min-h-[calc(100vh-140px)]">
-            {columns.map((column) => (
-              <KanbanColumn
-                key={column.id}
-                column={column}
-                onRenameColumn={handleRenameColumn}
-                onAddCard={handleAddCard}
-                onDeleteCard={handleDeleteCard}
-              />
-            ))}
-          </div>
-
-          <DragOverlay>
-            {activeCard && activeColumnId ? (
-              <div className="rotate-2 scale-105 transition-transform">
-                <KanbanCard
-                  card={activeCard}
-                  columnId={activeColumnId}
-                  onDeleteCard={() => {}}
+      {/* Main Container with Board and AI Sidebar */}
+      <div className="flex flex-1 min-h-0 overflow-hidden relative">
+        {/* Board Content */}
+        <div className="flex-1 p-6 overflow-x-auto overflow-y-hidden">
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCorners}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+          >
+            <div className="flex items-start gap-6 h-full pb-2">
+              {columns.map((column) => (
+                <KanbanColumn
+                  key={column.id}
+                  column={column}
+                  onRenameColumn={handleRenameColumn}
+                  onAddCard={handleAddCard}
+                  onDeleteCard={handleDeleteCard}
                 />
-              </div>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
+              ))}
+            </div>
+
+            <DragOverlay>
+              {activeCard && activeColumnId ? (
+                <div className="rotate-2 scale-105 transition-transform">
+                  <KanbanCard
+                    card={activeCard}
+                    columnId={activeColumnId}
+                    onDeleteCard={() => {}}
+                  />
+                </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        </div>
+
+        {/* AI Sidebar */}
+        <AiChatSidebar onBoardUpdated={(newBoard) => setColumns(newBoard)} />
       </div>
     </main>
   );

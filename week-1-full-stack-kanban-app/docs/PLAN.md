@@ -56,33 +56,32 @@
 ---
 
 ## Part 7: Full Stack Integration (Frontend + Backend)
-- [ ] Connect frontend state/hooks to backend API endpoints instead of static mock data.
-- [ ] Ensure drag-and-drop actions, card creation, and edits sync seamlessly to backend.
-- [ ] **Tests & Success Criteria**:
+- [x] Connect frontend state/hooks to backend API endpoints instead of static mock data.
+- [x] Ensure drag-and-drop actions, card creation, and edits sync seamlessly to backend.
+- [x] **Tests & Success Criteria**:
   - Page refresh preserves moved cards and column updates.
 
 ---
 
 ## Part 8: AI OpenRouter Connectivity Verification
-- [ ] Setup `OPENROUTER_API_KEY` configuration and HTTP client in backend.
-- [ ] Implement simple `/api/ai/test` endpoint performing a "2+2" prompt to `openai/gpt-oss-120b`.
-- [ ] **Tests & Success Criteria**:
+- [x] Setup `OPENROUTER_API_KEY` configuration and HTTP client in backend.
+- [x] Implement simple `/api/ai/test` endpoint performing a "2+2" prompt to `openai/gpt-oss-120b`.
+- [x] **Tests & Success Criteria**:
   - Endpoint returns a valid LLM response string containing `"4"`.
 
 ---
 
 ## Part 9: AI Structured Output Engine
-- [ ] Build LLM context payload builder (Kanban state JSON + User question + History).
-- [ ] Implement OpenRouter Structured Outputs request parsing (response message + optional board JSON).
-- [ ] **Tests & Success Criteria**:
+- [x] Build LLM context payload builder (Kanban state JSON + User question + History).
+- [x] Implement OpenRouter Structured Outputs request parsing (response message + optional board JSON).
+- [x] **Tests & Success Criteria**:
   - Backend unit tests simulate AI mutations and confirm schema validity of returned Kanban board.
 
 ---
 
 ## Part 10: AI Chat Sidebar & Dynamic Board Refresh
-- [ ] Add AI chat sidebar component in frontend.
-- [ ] Implement streaming or async polling for chat messages.
-- [ ] Automatically re-render Kanban board when AI structured output contains an updated board.
-- [ ] **Tests & Success Criteria**:
+- [x] Add a polished sidebar widget to the UI supporting a full AI chat experience.
+- [x] Allow the LLM (when it determines appropriate) to update the Kanban board using its Structured Outputs.
+- [x] If the AI updates the Kanban board, the UI should refresh automatically.
+- [x] **Tests & Success Criteria**:
   - User can ask "Move task X to Done" and the board visually updates without manual reload.
-

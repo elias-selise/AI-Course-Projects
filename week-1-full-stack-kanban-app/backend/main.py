@@ -1,10 +1,25 @@
 import os
 import json
 import sqlite3
+import httpx
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Response, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
+
+load_dotenv()
+
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+MODEL_NAME = os.getenv("OPENROUTER_MODEL", "openai/gpt-oss-120b")
+FREE_MODELS = [
+    "google/gemma-4-31b-it:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "poolside/laguna-s-2.1:free",
+    "inclusionai/ling-3.0-flash:free"
+]
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "kanban.db")
 
@@ -63,6 +78,14 @@ class LoginRequest(BaseModel):
 class BoardUpdateRequest(BaseModel):
     columns: list
 
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+class ChatRequest(BaseModel):
+    message: str
+    history: list[ChatMessage] = []
+
 @app.get("/api/health")
 def health_check():
     return {"status": "ok"}
@@ -109,6 +132,119 @@ def update_board(req: BoardUpdateRequest, request: Request):
     conn.commit()
     conn.close()
     return {"success": True, "columns": req.columns}
+
+@app.post("/api/ai/test")
+async def ai_test():
+    if not OPENROUTER_API_KEY:
+        raise HTTPException(status_code=500, detail="OPENROUTER_API_KEY is not set")
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # First try primary model
+        payload = {
+            "model": MODEL_NAME,
+            "messages": [
+                {"role": "user", "content": "What is 2+2? Answer with just the single number digit."}
+            ],
+        }
+        response = await client.post(OPENROUTER_URL, headers=headers, json=payload)
+        
+        if response.status_code == 402 or "Insufficient credits" in response.text:
+            # Fallback to free tier model
+            payload["model"] = FALLBACK_FREE_MODEL
+            response = await client.post(OPENROUTER_URL, headers=headers, json=payload)
+
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
+            
+        data = response.json()
+        reply = data["choices"][0]["message"]["content"].strip()
+        return {"success": True, "result": reply, "model_used": payload["model"], "raw": data}
+
+@app.post("/api/ai/chat")
+async def ai_chat(req: ChatRequest, request: Request):
+    if not OPENROUTER_API_KEY:
+        raise HTTPException(status_code=500, detail="OPENROUTER_API_KEY is not set")
+    
+    # Retrieve current board state
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT data FROM boards WHERE user_id = 'user-1'")
+    row = cursor.fetchone()
+    conn.close()
+    current_board = json.loads(row[0]) if row else DEFAULT_COLUMNS
+
+    system_prompt = (
+        "You are an AI assistant for a Project Management Kanban App.\n"
+        "You can inspect, create, edit, move, or delete cards on the Kanban board.\n\n"
+        "Current Kanban Board JSON State:\n"
+        f"{json.dumps(current_board, indent=2)}\n\n"
+        "RULES:\n"
+        "1. Respond to the user's request.\n"
+        "2. If the user asks you to modify, create, delete, move, or rename cards or columns, return valid JSON in this EXACT structure:\n"
+        "{\n"
+        '  "reply": "Your explanation to the user",\n'
+        '  "board": [ ... full updated columns array matching current board schema ... ]\n'
+        "}\n"
+        "3. If NO board changes are needed, return:\n"
+        "{\n"
+        '  "reply": "Your answer to the user",\n'
+        '  "board": null\n'
+        "}\n"
+        "Your response MUST be raw valid JSON strictly matching the schema above without markdown surrounding text."
+    )
+
+    messages = [{"role": "system", "content": system_prompt}]
+    for msg in req.history[-6:]:
+        messages.append({"role": msg.role, "content": msg.content})
+    messages.append({"role": "user", "content": req.message})
+
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    
+    candidate_models = [MODEL_NAME] + FREE_MODELS
+    last_error = ""
+
+    async with httpx.AsyncClient(timeout=45.0) as client:
+        for model in candidate_models:
+            payload = {
+                "model": model,
+                "messages": messages,
+                "response_format": {"type": "json_object"}
+            }
+            res = await client.post(OPENROUTER_URL, headers=headers, json=payload)
+            if res.status_code == 200:
+                content = res.json()["choices"][0]["message"]["content"]
+                try:
+                    parsed = json.loads(content)
+                    reply = parsed.get("reply", content)
+                    updated_board = parsed.get("board")
+                except Exception:
+                    reply = content
+                    updated_board = None
+
+                if updated_board and isinstance(updated_board, list):
+                    conn = sqlite3.connect(DB_PATH)
+                    cursor = conn.cursor()
+                    cursor.execute("UPDATE boards SET data = ? WHERE user_id = 'user-1'", (json.dumps(updated_board),))
+                    conn.commit()
+                    conn.close()
+
+                return {
+                    "success": True,
+                    "reply": reply,
+                    "board": updated_board,
+                    "model_used": model
+                }
+            else:
+                last_error = res.text
+
+    raise HTTPException(status_code=500, detail=f"All models failed: {last_error}")
 
 # Static files directory location (will be populated during Docker build or local export)
 static_dir = os.path.join(os.path.dirname(__file__), "static")
