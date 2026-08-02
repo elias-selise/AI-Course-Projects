@@ -1,0 +1,6 @@
+@echo off
+echo Building Docker image...
+docker build -t kanban-app .
+echo Starting container...
+docker run -d --name kanban-app -p 8000:8000 --env-file .env kanban-app 2>nul || docker run -d --name kanban-app -p 8000:8000 kanban-app
+echo Kanban app is running at http://localhost:8000
