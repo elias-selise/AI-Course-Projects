@@ -32,12 +32,13 @@ export function LoginForm({ onLoginSuccess }: LoginFormProps) {
       // Fallback local storage state for client-side routing
       localStorage.setItem("kanban_authenticated", "true");
       onLoginSuccess();
-    } catch (err: any) {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Login failed";
       if (username === "user" && password === "password") {
         localStorage.setItem("kanban_authenticated", "true");
         onLoginSuccess();
       } else {
-        setError(err.message || "Login failed");
+        setError(message);
       }
     } finally {
       setLoading(false);
