@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { Plus, Edit2, Check, X } from "lucide-react";
 import { Column } from "@/types/kanban";
 import { KanbanCard } from "./KanbanCard";
+import { getColumnMeta } from "@/lib/columnMeta";
 import {
   SortableContext,
   verticalListSortingStrategy,
@@ -36,6 +37,8 @@ export function KanbanColumn({
       column,
     },
   });
+
+  const { icon: ColumnIcon, accent, chipBg } = getColumnMeta(column.id);
 
   const handleTitleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,7 +99,12 @@ export function KanbanColumn({
         ) : (
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full bg-[#ecad0a]" />
+              <span
+                className="grid h-7 w-7 place-items-center rounded-lg border border-slate-700/60"
+                style={{ backgroundColor: chipBg, color: accent }}
+              >
+                <ColumnIcon className="h-4 w-4" />
+              </span>
               <h3 className="font-bold text-[#032147] text-base bg-gradient-to-r from-slate-100 to-slate-300 bg-clip-text text-transparent">
                 {column.title}
               </h3>
@@ -132,8 +140,9 @@ export function KanbanColumn({
             />
           ))}
           {column.cards.length === 0 && (
-            <div className="h-24 rounded-xl border border-dashed border-slate-700/50 flex items-center justify-center text-xs text-slate-500">
-              Drop items here
+            <div className="h-24 rounded-xl border border-dashed border-slate-700/50 flex flex-col items-center justify-center gap-1.5 text-xs text-slate-500">
+              <ColumnIcon className="h-5 w-5 opacity-40" />
+              <span>Drop items here</span>
             </div>
           )}
         </div>

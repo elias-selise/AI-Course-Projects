@@ -72,13 +72,14 @@ export function AiChatSidebar({ onBoardUpdated }: AiChatSidebarProps) {
       } else {
         throw new Error(data.detail || "AI response failed");
       }
-    } catch (err: any) {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to respond";
       setMessages((prev) => [
         ...prev,
         {
           id: `err-${Date.now()}`,
           role: "assistant",
-          content: `Sorry, I encountered an issue: ${err.message || "Failed to respond"}`,
+          content: `Sorry, I encountered an issue: ${message}`,
         },
       ]);
     } finally {

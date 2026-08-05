@@ -18,13 +18,27 @@ import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCard } from "@/components/KanbanCard";
 import { LoginForm } from "@/components/LoginForm";
 import { AiChatSidebar } from "@/components/AiChatSidebar";
-import { LayoutGrid, LogOut } from "lucide-react";
+import { LayoutGrid, LogOut, BarChart3, ListChecks } from "lucide-react";
 
 export default function KanbanBoard() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [columns, setColumns] = useState<Column[]>(INITIAL_COLUMNS);
   const [activeCard, setActiveCard] = useState<CardItem | null>(null);
   const [activeColumnId, setActiveColumnId] = useState<string | null>(null);
+
+  const fetchBoard = async () => {
+    try {
+      const res = await fetch("/api/board");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.columns && Array.isArray(data.columns)) {
+          setColumns(data.columns);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch board state", err);
+    }
+  };
 
   useEffect(() => {
     async function checkAuth() {
@@ -49,20 +63,6 @@ export default function KanbanBoard() {
     }
     checkAuth();
   }, []);
-
-  const fetchBoard = async () => {
-    try {
-      const res = await fetch("/api/board");
-      if (res.ok) {
-        const data = await res.json();
-        if (data.columns && Array.isArray(data.columns)) {
-          setColumns(data.columns);
-        }
-      }
-    } catch (err) {
-      console.error("Failed to fetch board state", err);
-    }
-  };
 
   const saveBoard = async (newColumns: Column[]) => {
     setColumns(newColumns);
@@ -234,7 +234,17 @@ export default function KanbanBoard() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-4 text-xs text-[#888888]">
+          <div className="flex items-center gap-3 text-xs text-[#888888]">
+            <div className="hidden md:flex items-center gap-3">
+              <span className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-1.5">
+                <ListChecks className="h-3.5 w-3.5 text-[#209dd7]" />
+                {columns.length} columns
+              </span>
+              <span className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-1.5">
+                <BarChart3 className="h-3.5 w-3.5 text-[#ecad0a]" />
+                {columns.reduce((n, c) => n + c.cards.length, 0)} cards
+              </span>
+            </div>
             <button
               onClick={handleLogout}
               className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-1.5 text-xs text-slate-300 hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-400 transition-colors"
