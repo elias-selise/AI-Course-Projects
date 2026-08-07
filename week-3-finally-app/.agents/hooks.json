@@ -1,0 +1,14 @@
+{
+  "hooks": [
+    {
+      "name": "code-review",
+      "description": "Ensure code is reviewed before the agent stops working",
+      "event": "stop",
+      "action": {
+        "type": "subagent",
+        "agentType": "reviewer",
+        "prompt": "Please review the code changes made in this session and ensure they meet our standards."
+      }
+    }
+  ]
+}
