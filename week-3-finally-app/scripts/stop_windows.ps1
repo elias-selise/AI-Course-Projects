@@ -1,9 +1,15 @@
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$ProjectRoot = Split-Path -Parent $ScriptDir
+$ErrorActionPreference = "Stop"
 
+$ProjectRoot = Resolve-Path "$PSScriptRoot\.."
 Set-Location $ProjectRoot
 
-Write-Host "Stopping FinAlly AI Trading Workstation..." -ForegroundColor Yellow
-docker compose down
+Write-Host "=== Stopping FinAlly Trading Workstation ===" -ForegroundColor Cyan
 
-Write-Host "FinAlly container stopped. SQLite database persisted in db/ directory." -ForegroundColor Green
+if (Get-Command "docker-compose" -ErrorAction SilentlyContinue) {
+    $ComposeCmd = "docker-compose"
+} else {
+    $ComposeCmd = "docker compose"
+}
+
+Invoke-Expression "$ComposeCmd down"
+Write-Host "FinAlly containers stopped successfully." -ForegroundColor Green

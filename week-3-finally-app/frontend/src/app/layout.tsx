@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'FinAlly — AI Trading Workstation',
-  description: 'Real-time Bloomberg terminal style trading workstation with AI copilot.',
+  title: 'FinAlly Terminal',
+  description: 'AI-Powered Market Data & Trading Workstation',
 };
 
 export default function RootLayout({
@@ -12,8 +12,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
-      <body className="bg-background text-gray-100 min-h-screen flex flex-col overflow-hidden" suppressHydrationWarning>
+    <html lang="en" className="dark">
+      <body className="bg-terminal-bg text-gray-100 min-h-screen font-mono antialiased">
         {children}
       </body>
     </html>

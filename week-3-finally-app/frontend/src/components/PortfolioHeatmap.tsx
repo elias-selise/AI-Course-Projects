@@ -1,96 +1,128 @@
-import React from 'react';
-import { Position } from '../types';
-import { LayoutGrid, PieChart } from 'lucide-react';
+'use client';
 
-interface PortfolioHeatmapProps {
-  positions: Position[];
-  onSelectTicker?: (ticker: string) => void;
+import React from 'react';
+import { ResponsiveContainer, Treemap } from 'recharts';
+import { useTerminalStore } from '@/store/useTerminalStore';
+
+interface TreemapNodeProps {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  name?: string;
+  size?: number;
+  pnl?: number;
+  pnlPercent?: number;
 }
 
-export const PortfolioHeatmap: React.FC<PortfolioHeatmapProps> = ({ positions, onSelectTicker }) => {
-  const activePositions = positions.filter(p => p.quantity > 0);
-  const totalMarketValue = activePositions.reduce((sum, p) => sum + (p.quantity * p.current_price), 0);
+const CustomizedTreemapContent: React.FC<TreemapNodeProps> = ({
+  x = 0,
+  y = 0,
+  width = 0,
+  height = 0,
+  name,
+  pnlPercent = 0,
+}) => {
+  if (width < 20 || height < 20) return null;
 
-  const getPnlBgColor = (pnlPct: number) => {
-    if (pnlPct >= 10) return 'bg-emerald-600 border-emerald-400 text-white';
-    if (pnlPct > 0) return 'bg-emerald-800/80 border-emerald-600 text-emerald-100';
-    if (pnlPct === 0) return 'bg-gray-800 border-gray-600 text-gray-200';
-    if (pnlPct > -10) return 'bg-rose-900/80 border-rose-700 text-rose-100';
-    return 'bg-rose-700 border-rose-500 text-white';
-  };
+  const isCash = name === 'CASH';
+  const isPositive = pnlPercent >= 0;
+
+  let bgFill = '#334155'; // Cash/neutral
+  if (!isCash) {
+    bgFill = isPositive ? '#15803d' : '#b91c1c';
+  }
 
   return (
-    <div data-testid="portfolio-heatmap" className="bg-panel border border-border rounded flex flex-col h-full overflow-hidden select-none">
-      {/* Header */}
-      <div className="bg-panel-header px-3.5 py-2.5 border-b border-border flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <LayoutGrid className="w-4 h-4 text-accent-yellow" />
-          <h2 className="text-xs font-mono font-bold uppercase tracking-wider text-accent-yellow">
-            PORTFOLIO HEATMAP (TREEMAP)
-          </h2>
-        </div>
-        <span className="text-[10px] font-mono text-gray-400">
-          WEIGHTED BY POSITION VALUE
-        </span>
-      </div>
+    <g>
+      <rect
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        style={{
+          fill: bgFill,
+          stroke: '#0d1117',
+          strokeWidth: 2,
+          rx: 4,
+        }}
+      />
+      {width > 40 && height > 30 && (
+        <text
+          x={x + width / 2}
+          y={y + height / 2 - 4}
+          textAnchor="middle"
+          fill="#ffffff"
+          fontSize={11}
+          fontWeight="bold"
+          fontFamily="monospace"
+        >
+          {name}
+        </text>
+      )}
+      {width > 40 && height > 45 && !isCash && (
+        <text
+          x={x + width / 2}
+          y={y + height / 2 + 10}
+          textAnchor="middle"
+          fill={isPositive ? '#86efac' : '#fca5a5'}
+          fontSize={10}
+          fontFamily="monospace"
+        >
+          {isPositive ? '+' : ''}
+          {pnlPercent.toFixed(1)}%
+        </text>
+      )}
+    </g>
+  );
+};
 
-      {/* Heatmap Area */}
-      <div className="flex-1 p-3 min-h-[160px] overflow-hidden">
-        {activePositions.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-gray-500 font-mono text-xs p-4 text-center border border-dashed border-border rounded">
-            <PieChart className="w-8 h-8 mb-2 opacity-40 text-accent-blue" />
-            <p className="font-semibold text-gray-400">NO ACTIVE POSITIONS</p>
-            <p className="text-[11px] text-gray-500 mt-1">
-              Use the Trade Bar or AI Copilot to execute buy orders.
-            </p>
+export const PortfolioHeatmap: React.FC = () => {
+  const { portfolio } = useTerminalStore();
+
+  const positions = portfolio?.positions || [];
+  const cash = portfolio?.cash_balance || 0;
+
+  const treeData = [
+    ...positions.map((pos) => ({
+      name: pos.ticker,
+      size: Math.max(pos.market_value, 1),
+      pnl: pos.unrealized_pnl,
+      pnlPercent: pos.unrealized_pnl_percent,
+    })),
+    ...(cash > 0
+      ? [
+          {
+            name: 'CASH',
+            size: cash,
+            pnl: 0,
+            pnlPercent: 0,
+          },
+        ]
+      : []),
+  ];
+
+  return (
+    <div className="bg-terminal-card border border-terminal-border rounded-lg p-3 flex flex-col h-full">
+      <h2 className="text-xs font-semibold uppercase tracking-wider text-terminal-yellow mb-2">
+        Portfolio Allocation & P&L Heatmap
+      </h2>
+
+      <div className="w-full h-[220px] min-h-[220px] relative">
+        {treeData.length === 0 ? (
+          <div className="w-full h-full flex items-center justify-center text-terminal-muted text-xs font-mono">
+            No active portfolio positions
           </div>
         ) : (
-          <div className="h-full flex flex-wrap gap-1.5 align-stretch">
-            {activePositions.map((pos) => {
-              const marketVal = pos.quantity * pos.current_price;
-              const weight = totalMarketValue > 0 ? (marketVal / totalMarketValue) : (1 / activePositions.length);
-              const flexGrow = Math.max(1, Math.round(weight * 100));
-              const pnlIsPos = pos.unrealized_pnl >= 0;
-
-              return (
-                <div
-                  key={pos.ticker}
-                  onClick={() => onSelectTicker && onSelectTicker(pos.ticker)}
-                  style={{ flex: `${flexGrow} 1 120px` }}
-                  className={`group relative p-2.5 rounded border transition-all duration-200 cursor-pointer flex flex-col justify-between overflow-hidden shadow-sm hover:scale-[1.01] ${getPnlBgColor(
-                    pos.unrealized_pnl_pct
-                  )}`}
-                >
-                  <div className="flex items-center justify-between font-mono">
-                    <span className="font-bold text-sm tracking-wider uppercase drop-shadow-sm">
-                      {pos.ticker}
-                    </span>
-                    <span className="text-[10px] font-semibold opacity-90">
-                      {(weight * 100).toFixed(1)}%
-                    </span>
-                  </div>
-
-                  <div className="mt-2 font-mono">
-                    <div className="text-xs font-bold">
-                      ${marketVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </div>
-                    <div className="text-[11px] font-semibold mt-0.5">
-                      {pnlIsPos ? '+' : ''}${(pos.unrealized_pnl ?? 0).toFixed(2)} ({pnlIsPos ? '+' : ''}{(pos.unrealized_pnl_pct ?? 0).toFixed(2)}%)
-                    </div>
-                  </div>
-
-                  {/* Tooltip Overlay */}
-                  <div className="absolute inset-0 bg-black/90 p-2 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-center text-[10px] font-mono text-white pointer-events-none">
-                    <div className="font-bold text-accent-yellow mb-1">{pos.ticker} Position</div>
-                    <div>Qty: {pos.quantity} shares</div>
-                    <div>Avg Cost: ${(pos.avg_cost ?? 0).toFixed(2)}</div>
-                    <div>Price: ${(pos.current_price ?? 0).toFixed(2)}</div>
-                    <div>Market Val: ${marketVal.toFixed(2)}</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <ResponsiveContainer width="100%" height="100%">
+            <Treemap
+              data={treeData}
+              dataKey="size"
+              aspectRatio={4 / 3}
+              stroke="#0d1117"
+              content={<CustomizedTreemapContent />}
+            />
+          </ResponsiveContainer>
         )}
       </div>
     </div>

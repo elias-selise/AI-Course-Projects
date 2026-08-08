@@ -3,27 +3,29 @@ from typing import List
 
 
 class MarketDataSource(ABC):
+    """Abstract interface for live or simulated market data providers."""
+
     @abstractmethod
-    async def start(self, initial_tickers: List[str]) -> None:
-        """Start streaming or polling price updates for tickers."""
+    async def start(self) -> None:
+        """Start continuous background tick polling or generation."""
         pass
 
     @abstractmethod
     async def stop(self) -> None:
-        """Stop streaming or polling price updates."""
+        """Gracefully stop background tick task."""
         pass
 
     @abstractmethod
-    async def add_ticker(self, ticker: str) -> None:
-        """Add a ticker to the active subscription list."""
+    def add_ticker(self, ticker: str) -> None:
+        """Add ticker symbol to tracking list."""
         pass
 
     @abstractmethod
-    async def remove_ticker(self, ticker: str) -> None:
-        """Remove a ticker from the active subscription list."""
+    def remove_ticker(self, ticker: str) -> None:
+        """Remove ticker symbol from tracking list."""
         pass
 
     @abstractmethod
     def get_tickers(self) -> List[str]:
-        """Get the current list of subscribed tickers."""
+        """Return copy of active tracked tickers list."""
         pass

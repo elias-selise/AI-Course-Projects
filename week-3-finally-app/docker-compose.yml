@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  app:
+  finally-app:
     build:
       context: .
       dockerfile: Dockerfile
@@ -9,12 +9,16 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./db:/app/backend/db
       - ./db:/app/db
-    env_file:
-      - .env
     environment:
+      - LLM_MOCK=${LLM_MOCK:-true}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - MASSIVE_API_KEY=${MASSIVE_API_KEY:-}
-      - LLM_MOCK=${LLM_MOCK:-false}
+      - DB_PATH=/app/db/finally.db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
     restart: unless-stopped

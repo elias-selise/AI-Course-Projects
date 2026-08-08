@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
-echo "Stopping FinAlly AI Trading Workstation..."
-docker compose down
+echo "=== Stopping FinAlly Trading Workstation ==="
 
-echo "FinAlly container stopped. SQLite database persisted in db/ directory."
+if command -v docker-compose > /dev/null 2>&1; then
+  COMPOSE_CMD="docker-compose"
+else
+  COMPOSE_CMD="docker compose"
+fi
+
+$COMPOSE_CMD down
+echo "FinAlly containers stopped successfully."

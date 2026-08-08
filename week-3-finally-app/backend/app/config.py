@@ -1,23 +1,25 @@
-import os
+from functools import lru_cache
 from pathlib import Path
+from typing import Optional
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-PROJECT_ROOT = BASE_DIR.parent
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+DEFAULT_DB_PATH = BASE_DIR / "db" / "finally.db"
 
-# Database configuration
-# Look for DATABASE_PATH env var first, otherwise check /app/db/finally.db, project_root/db/finally.db, or local finally.db
-env_db_path = os.getenv("DATABASE_PATH")
-if env_db_path:
-    DATABASE_PATH = Path(env_db_path)
-elif Path("/app/db").exists():
-    DATABASE_PATH = Path("/app/db/finally.db")
-else:
-    DATABASE_PATH = PROJECT_ROOT / "db" / "finally.db"
 
-# API Keys & Flags
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-MASSIVE_API_KEY = os.getenv("MASSIVE_API_KEY", "")
-LLM_MOCK = os.getenv("LLM_MOCK", "false").lower() in ("true", "1", "yes")
+class Settings(BaseSettings):
+    DB_PATH: Path = DEFAULT_DB_PATH
+    MASSIVE_API_KEY: Optional[str] = None
+    OPENROUTER_API_KEY: Optional[str] = None
+    LLM_MOCK: bool = True
 
-# Static frontend directory
-FRONTEND_STATIC_DIR = PROJECT_ROOT / "frontend" / "out"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore"
+    )
+
+
+@lru_cache()
+def get_settings() -> Settings:
+    return Settings()

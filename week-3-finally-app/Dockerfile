@@ -1,36 +1,51 @@
-# Stage 1: Build static Next.js frontend
-FROM node:20-slim AS frontend-builder
+# ==============================================================================
+# Stage 1: Build Next.js Static Export Frontend
+# ==============================================================================
+FROM node:20-alpine AS frontend-builder
 WORKDIR /app/frontend
 
-COPY frontend/package*.json ./
-RUN npm ci || npm install
+# Copy package manifests & install dependencies
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
 
+# Copy frontend source code & execute static export build
 COPY frontend/ ./
 RUN npm run build
 
-# Stage 2: Fast Python backend with uv & static frontend serving
+# ==============================================================================
+# Stage 2: Final Production Python FastAPI Runtime
+# ==============================================================================
 FROM python:3.12-slim AS runner
+
 WORKDIR /app
 
-# Install uv from official image
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+# Prevent Python buffering and bytecode write
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PORT=8000 \
+    DB_PATH=/app/db/finally.db
 
-# Copy backend pyproject.toml and source code
-COPY backend/pyproject.toml backend/README.md* ./backend/
-COPY backend/app ./backend/app
+# Install system dependencies (curl for healthcheck)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies using uv
+# Install uv package manager
+RUN pip install --no-cache-dir uv
+
+# Copy backend dependency declarations and source code
+COPY backend/pyproject.toml /app/backend/pyproject.toml
+COPY backend/README.md /app/backend/README.md
+COPY backend/app /app/backend/app
+
+# Install Python backend dependencies using uv into system site-packages
 WORKDIR /app/backend
-RUN uv sync --frozen || uv sync
+RUN uv pip install --system -e .
 
-# Copy frontend static export output into backend static path
-COPY --from=frontend-builder /app/frontend/out /app/frontend/out
+# Copy built frontend static export from Stage 1 into FastAPI static directory
 COPY --from=frontend-builder /app/frontend/out /app/backend/app/static
 
-# Expose port 8000
 EXPOSE 8000
 
-ENV PYTHONUNBUFFERED=1
-ENV PORT=8000
-
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run Uvicorn server serving API and static frontend
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

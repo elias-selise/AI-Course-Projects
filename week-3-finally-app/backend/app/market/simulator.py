@@ -1,133 +1,126 @@
 import asyncio
-import random
-import math
-from datetime import datetime, timezone
-from typing import List, Dict, Optional
+import logging
 import numpy as np
+from datetime import datetime, timezone
+from typing import Dict, List, Optional
+from app.db.schema import DEFAULT_TICKERS
+from app.market.cache import PriceCache
+from app.market.interface import MarketDataSource
+from app.market.models import PriceUpdate
 
-from .interface import MarketDataSource
-from .models import PriceUpdate
-from .cache import PriceCache
-from .seed_prices import (
-    SEED_PRICES,
-    GBM_PARAMS,
-    CORRELATION_GROUPS,
-    SAME_GROUP_CORR,
-    CROSS_GROUP_CORR,
-)
+logger = logging.getLogger("finally.market.simulator")
+
+DEFAULT_INITIAL_PRICES = {
+    "AAPL": 180.0,
+    "GOOGL": 140.0,
+    "MSFT": 400.0,
+    "AMZN": 175.0,
+    "TSLA": 200.0,
+    "NVDA": 850.0,
+    "META": 485.0,
+    "JPM": 195.0,
+    "V": 280.0,
+    "NFLX": 600.0,
+}
+
+TECH_TICKERS = {"AAPL", "GOOGL", "MSFT", "AMZN", "TSLA", "NVDA", "META"}
+FINANCE_TICKERS = {"JPM", "V"}
 
 
 class GBMSimulator:
-    def __init__(self, initial_tickers: Optional[List[str]] = None):
-        self.tickers: List[str] = []
+    """Geometric Brownian Motion simulator with Cholesky sector correlation and shock events."""
+
+    def __init__(
+        self,
+        tickers: Optional[List[str]] = None,
+        initial_prices: Optional[Dict[str, float]] = None,
+    ):
+        self.tickers: List[str] = list(tickers) if tickers else list(DEFAULT_TICKERS)
         self.prices: Dict[str, float] = {}
-        self.prev_prices: Dict[str, float] = {}
-        
-        tickers_to_add = initial_tickers or list(SEED_PRICES.keys())
-        for t in tickers_to_add:
-            self.add_ticker(t)
 
-    def get_tickers(self) -> List[str]:
-        return list(self.tickers)
+        base_prices = dict(DEFAULT_INITIAL_PRICES)
+        if initial_prices:
+            base_prices.update(initial_prices)
 
-    def add_ticker(self, ticker: str) -> None:
-        t_upper = ticker.upper().strip()
-        if t_upper not in self.tickers:
-            self.tickers.append(t_upper)
-            seed = SEED_PRICES.get(t_upper, 100.0)
-            self.prices[t_upper] = seed
-            self.prev_prices[t_upper] = seed
+        for t in self.tickers:
+            self.prices[t] = base_prices.get(t, 100.0)
 
-    def remove_ticker(self, ticker: str) -> None:
-        t_upper = ticker.upper().strip()
-        if t_upper in self.tickers:
-            self.tickers.remove(t_upper)
-            self.prices.pop(t_upper, None)
-            self.prev_prices.pop(t_upper, None)
+        self.dt = 0.5 / 86400.0  # 500ms time step in days
+        self.mu = 0.0001
+        self.sigma = 0.015
+        self._rebuild_correlation_matrix()
 
-    def _build_correlation_matrix(self) -> np.ndarray:
+    def _rebuild_correlation_matrix(self) -> None:
         n = len(self.tickers)
         if n == 0:
-            return np.empty((0, 0))
-        corr = np.eye(n)
-        
-        # Build ticker to group map
-        ticker_to_group = {}
-        for group, members in CORRELATION_GROUPS.items():
-            for m in members:
-                ticker_to_group[m] = group
+            self.L = np.empty((0, 0))
+            return
 
-        for i in range(n):
-            for j in range(i + 1, n):
-                t1, t2 = self.tickers[i], self.tickers[j]
-                g1 = ticker_to_group.get(t1)
-                g2 = ticker_to_group.get(t2)
-                
-                if g1 and g2 and g1 == g2:
-                    c_val = SAME_GROUP_CORR
-                else:
-                    c_val = CROSS_GROUP_CORR
-                corr[i, j] = c_val
-                corr[j, i] = c_val
-        return corr
+        corr_matrix = np.full((n, n), 0.3)
+        np.fill_diagonal(corr_matrix, 1.0)
 
-    def step(self, dt: float = 1.0 / (252 * 6.5 * 3600)) -> List[PriceUpdate]:
-        """Perform one simulation step and return PriceUpdate objects."""
+        for i, t1 in enumerate(self.tickers):
+            for j, t2 in enumerate(self.tickers):
+                if i == j:
+                    continue
+                if t1 in TECH_TICKERS and t2 in TECH_TICKERS:
+                    corr_matrix[i, j] = 0.6
+                elif t1 in FINANCE_TICKERS and t2 in FINANCE_TICKERS:
+                    corr_matrix[i, j] = 0.5
+
+        # Ensure positive semi-definite matrix for Cholesky decomposition
+        try:
+            self.L = np.linalg.cholesky(corr_matrix)
+        except np.linalg.LinAlgError:
+            # Fallback to eigen-value clipping if numerical issues arise
+            eigvals, eigvecs = np.linalg.eigh(corr_matrix)
+            eigvals = np.maximum(eigvals, 1e-6)
+            corr_matrix = eigvecs @ np.diag(eigvals) @ eigvecs.T
+            self.L = np.linalg.cholesky(corr_matrix)
+
+    def add_ticker(self, ticker: str, initial_price: float = 100.0) -> None:
+        if ticker not in self.tickers:
+            self.tickers.append(ticker)
+            self.prices[ticker] = DEFAULT_INITIAL_PRICES.get(ticker, initial_price)
+            self._rebuild_correlation_matrix()
+
+    def remove_ticker(self, ticker: str) -> None:
+        if ticker in self.tickers:
+            self.tickers.remove(ticker)
+            self.prices.pop(ticker, None)
+            self._rebuild_correlation_matrix()
+
+    def tick(self) -> List[PriceUpdate]:
         n = len(self.tickers)
         if n == 0:
             return []
 
-        corr = self._build_correlation_matrix()
-
-        # Compute Cholesky decomposition or nearest positive semi-definite matrix
-        try:
-            L = np.linalg.cholesky(corr)
-        except np.linalg.LinAlgError:
-            # Fallback to eigenvalue adjustment if non-positive definite
-            eigvals, eigvecs = np.linalg.eigh(corr)
-            eigvals = np.maximum(eigvals, 1e-6)
-            corr_psd = eigvecs @ np.diag(eigvals) @ eigvecs.T
-            # Normalize diagonal to 1
-            inv_std = 1.0 / np.sqrt(np.diag(corr_psd))
-            corr_psd = np.outer(inv_std, inv_std) * corr_psd
-            L = np.linalg.cholesky(corr_psd)
-
-        uncorrelated = np.random.normal(0.0, 1.0, size=n)
-        Z = L @ uncorrelated
+        uncorrelated = np.random.normal(0, 1, n)
+        correlated = self.L @ uncorrelated
 
         updates: List[PriceUpdate] = []
         now_iso = datetime.now(timezone.utc).isoformat()
 
-        for i, ticker in enumerate(self.tickers):
-            mu, sigma = GBM_PARAMS.get(ticker, (0.05, 0.25))
-            current_p = self.prices[ticker]
-            self.prev_prices[ticker] = current_p
+        for idx, ticker in enumerate(self.tickers):
+            prev_price = self.prices[ticker]
 
-            # GBM calculation
-            drift = (mu - 0.5 * (sigma ** 2)) * dt
-            diffusion = sigma * math.sqrt(dt) * Z[i]
-            new_p = current_p * math.exp(drift + diffusion)
+            # Random shock event (~0.1% chance)
+            shock = 1.0
+            if np.random.random() < 0.001:
+                shock = 1.0 + np.random.uniform(-0.05, 0.05)
 
-            # Random shock event check (~0.2% chance per tick)
-            if random.random() < 0.002:
-                shock_factor = random.uniform(0.95, 1.05)
-                new_p *= shock_factor
+            drift = (self.mu - 0.5 * self.sigma**2) * self.dt
+            diffusion = self.sigma * np.sqrt(self.dt) * correlated[idx]
+            new_price = max(0.01, round(prev_price * np.exp(drift + diffusion) * shock, 2))
 
-            new_p = max(0.01, round(new_p, 2))
-            self.prices[ticker] = new_p
-
-            change = round(new_p - current_p, 2)
-            if change > 0:
-                direction = "up"
-            elif change < 0:
-                direction = "down"
-            else:
-                direction = "flat"
+            self.prices[ticker] = new_price
+            change = round(new_price - prev_price, 2)
+            direction = "up" if change > 0 else ("down" if change < 0 else "flat")
 
             update = PriceUpdate(
                 ticker=ticker,
-                price=new_p,
-                previous_price=current_p,
+                price=new_price,
+                previous_price=prev_price,
                 timestamp=now_iso,
                 change=change,
                 direction=direction,
@@ -138,54 +131,54 @@ class GBMSimulator:
 
 
 class SimulatorDataSource(MarketDataSource):
-    def __init__(self, cache: PriceCache, update_interval: float = 0.5):
+    """Market data source driven by GBMSimulator running on a 500ms background loop."""
+
+    def __init__(
+        self,
+        cache: PriceCache,
+        tickers: Optional[List[str]] = None,
+        initial_prices: Optional[Dict[str, float]] = None,
+    ):
         self.cache = cache
-        self.update_interval = update_interval
-        self.simulator = GBMSimulator()
+        self.simulator = GBMSimulator(tickers=tickers, initial_prices=initial_prices)
         self._task: Optional[asyncio.Task] = None
-        self._running = False
+        self._running: bool = False
 
-    async def start(self, initial_tickers: List[str]) -> None:
-        for t in initial_tickers:
-            self.simulator.add_ticker(t)
-        
-        # Initial step to populate cache
-        updates = self.simulator.step()
-        self.cache.update_batch(updates)
-
+    async def start(self) -> None:
+        if self._running:
+            return
         self._running = True
         self._task = asyncio.create_task(self._run_loop())
+        logger.info("SimulatorDataSource started.")
 
     async def _run_loop(self) -> None:
         while self._running:
             try:
-                await asyncio.sleep(self.update_interval)
-                updates = self.simulator.step()
+                updates = self.simulator.tick()
                 if updates:
-                    self.cache.update_batch(updates)
-            except asyncio.CancelledError:
-                break
-            except Exception:
-                await asyncio.sleep(1.0)
+                    self.cache.set_many(updates)
+            except Exception as e:
+                logger.error(f"Error in simulator tick loop: {e}")
+            await asyncio.sleep(0.5)
 
     async def stop(self) -> None:
+        if not self._running:
+            return
         self._running = False
-        if self._task and not self._task.done():
+        if self._task:
             self._task.cancel()
             try:
                 await self._task
             except asyncio.CancelledError:
                 pass
             self._task = None
+        logger.info("SimulatorDataSource stopped.")
 
-    async def add_ticker(self, ticker: str) -> None:
+    def add_ticker(self, ticker: str) -> None:
         self.simulator.add_ticker(ticker)
-        # Immediate update for new ticker
-        updates = self.simulator.step()
-        self.cache.update_batch(updates)
 
-    async def remove_ticker(self, ticker: str) -> None:
+    def remove_ticker(self, ticker: str) -> None:
         self.simulator.remove_ticker(ticker)
 
     def get_tickers(self) -> List[str]:
-        return self.simulator.get_tickers()
+        return list(self.simulator.tickers)

@@ -1,107 +1,104 @@
-import React from 'react';
-import { Position } from '../types';
-import { Briefcase, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+'use client';
 
-interface PositionsTableProps {
-  positions: Position[];
-  selectedTicker: string;
-  onSelectTicker: (ticker: string) => void;
-  onQuickTrade?: (ticker: string, side: 'buy' | 'sell') => void;
-}
+import React, { useState } from 'react';
+import { useTerminalStore } from '@/store/useTerminalStore';
+import { Position } from '@/types';
 
-export const PositionsTable: React.FC<PositionsTableProps> = ({
-  positions,
-  selectedTicker,
-  onSelectTicker,
-  onQuickTrade,
-}) => {
-  const activePositions = positions.filter(p => p.quantity > 0);
+export const PositionsTable: React.FC = () => {
+  const { portfolio, executeTrade, setSelectedTicker, selectedTicker } =
+    useTerminalStore();
+
+  const [sellingTicker, setSellingTicker] = useState<string | null>(null);
+
+  const positions: Position[] = portfolio?.positions || [];
+
+  const handleSellAll = async (pos: Position) => {
+    setSellingTicker(pos.ticker);
+    try {
+      await executeTrade(pos.ticker, 'sell', pos.quantity);
+    } catch (err) {
+      console.error('Sell execution failed:', err);
+    } finally {
+      setSellingTicker(null);
+    }
+  };
 
   return (
-    <div data-testid="positions-table" className="bg-panel border border-border rounded flex flex-col h-full overflow-hidden select-none">
-      {/* Header */}
-      <div className="bg-panel-header px-3.5 py-2.5 border-b border-border flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Briefcase className="w-4 h-4 text-accent-yellow" />
-          <h2 className="text-xs font-mono font-bold uppercase tracking-wider text-accent-yellow">
-            OPEN POSITIONS ({activePositions.length})
-          </h2>
-        </div>
-      </div>
+    <div className="bg-terminal-card border border-terminal-border rounded-lg p-3 flex flex-col h-full overflow-hidden">
+      <h2 className="text-xs font-semibold uppercase tracking-wider text-terminal-yellow mb-2">
+        Active Portfolio Positions ({positions.length})
+      </h2>
 
-      {/* Table Body */}
-      <div className="flex-1 overflow-x-auto overflow-y-auto">
-        {activePositions.length === 0 ? (
-          <div className="p-8 text-center text-gray-500 font-mono text-xs">
-            NO OPEN POSITIONS HELD
-          </div>
-        ) : (
-          <table className="w-full text-left border-collapse font-mono text-xs">
-            <thead>
-              <tr className="bg-black/30 border-b border-border text-[10px] text-gray-400 uppercase tracking-wider">
-                <th className="px-3 py-2">Ticker</th>
-                <th className="px-3 py-2 text-right">Qty</th>
-                <th className="px-3 py-2 text-right">Avg Cost</th>
-                <th className="px-3 py-2 text-right">Price</th>
-                <th className="px-3 py-2 text-right">Market Value</th>
-                <th className="px-3 py-2 text-right">Unrealized P&L</th>
-                <th className="px-3 py-2 text-center">Action</th>
+      <div className="overflow-x-auto overflow-y-auto max-h-[220px] flex-1">
+        <table className="w-full text-left text-xs font-mono border-collapse">
+          <thead>
+            <tr className="border-b border-terminal-border text-terminal-muted uppercase text-[10px] sticky top-0 bg-terminal-card z-10">
+              <th className="py-1.5 px-2">Ticker</th>
+              <th className="py-1.5 px-2 text-right">Qty</th>
+              <th className="py-1.5 px-2 text-right">Avg Cost</th>
+              <th className="py-1.5 px-2 text-right">Current</th>
+              <th className="py-1.5 px-2 text-right">Market Val</th>
+              <th className="py-1.5 px-2 text-right">Unrealized P&L</th>
+              <th className="py-1.5 px-2 text-center">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {positions.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="py-6 text-center text-terminal-muted italic">
+                  No active open positions in portfolio.
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-border/40">
-              {activePositions.map((pos) => {
-                const isSelected = pos.ticker === selectedTicker;
-                const isPos = pos.unrealized_pnl >= 0;
+            ) : (
+              positions.map((pos) => {
+                const isProfitable = pos.unrealized_pnl >= 0;
+                const isSelected = selectedTicker === pos.ticker;
 
                 return (
                   <tr
                     key={pos.ticker}
-                    data-testid={`position-row-${pos.ticker}`}
-                    onClick={() => onSelectTicker(pos.ticker)}
-                    className={`cursor-pointer transition-colors ${
-                      isSelected
-                        ? 'bg-amber-500/10 text-white font-bold'
-                        : 'hover:bg-gray-800/40 text-gray-200'
+                    onClick={() => setSelectedTicker(pos.ticker)}
+                    className={`border-b border-terminal-border/50 hover:bg-terminal-bg/60 cursor-pointer transition ${
+                      isSelected ? 'bg-terminal-bg/80' : ''
                     }`}
                   >
-                    <td className="px-3 py-2.5 text-right font-bold text-accent-yellow flex items-center gap-1">
-                      {pos.ticker}
+                    <td className="py-2 px-2 font-bold text-white flex items-center space-x-1">
+                      <span>{pos.ticker}</span>
                     </td>
-                    <td className="px-3 py-2.5 text-right">{pos.quantity ?? 0}</td>
-                    <td className="px-3 py-2.5 text-right text-gray-400">${(pos.avg_cost ?? 0).toFixed(2)}</td>
-                    <td className="px-3 py-2.5 text-right text-white font-semibold">${(pos.current_price ?? 0).toFixed(2)}</td>
-                    <td className="px-3 py-2.5 text-right text-white font-bold">
-                      ${(pos.market_value ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    <td className="py-2 px-2 text-right text-gray-200">{pos.quantity}</td>
+                    <td className="py-2 px-2 text-right text-gray-300">
+                      ${pos.avg_cost.toFixed(2)}
                     </td>
-                    <td className={`px-3 py-2.5 text-right font-bold ${isPos ? 'text-trade-up' : 'text-trade-down'}`}>
-                      <div className="flex items-center justify-end gap-1">
-                        {isPos ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
-                        <span>{isPos ? '+' : ''}${(pos.unrealized_pnl ?? 0).toFixed(2)}</span>
-                        <span className="text-[10px] text-gray-400">({isPos ? '+' : ''}{(pos.unrealized_pnl_pct ?? 0).toFixed(2)}%)</span>
-                      </div>
+                    <td className="py-2 px-2 text-right text-white font-semibold">
+                      ${pos.current_price.toFixed(2)}
                     </td>
-                    <td className="px-3 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          onClick={() => onQuickTrade && onQuickTrade(pos.ticker, 'buy')}
-                          className="px-2 py-0.5 rounded bg-emerald-950 border border-emerald-600 text-emerald-400 hover:bg-emerald-800 text-[10px] transition-colors"
-                        >
-                          BUY
-                        </button>
-                        <button
-                          onClick={() => onQuickTrade && onQuickTrade(pos.ticker, 'sell')}
-                          className="px-2 py-0.5 rounded bg-rose-950 border border-rose-600 text-rose-400 hover:bg-rose-800 text-[10px] transition-colors"
-                        >
-                          SELL
-                        </button>
-                      </div>
+                    <td className="py-2 px-2 text-right text-white font-semibold">
+                      ${pos.market_value.toFixed(2)}
+                    </td>
+                    <td
+                      className={`py-2 px-2 text-right font-semibold ${
+                        isProfitable ? 'text-emerald-400' : 'text-red-400'
+                      }`}
+                    >
+                      {isProfitable ? '+' : ''}${pos.unrealized_pnl.toFixed(2)} (
+                      {isProfitable ? '+' : ''}
+                      {pos.unrealized_pnl_percent.toFixed(2)}%)
+                    </td>
+                    <td className="py-2 px-2 text-center" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => handleSellAll(pos)}
+                        disabled={sellingTicker === pos.ticker}
+                        className="px-2 py-0.5 bg-red-600/20 hover:bg-red-600/40 border border-red-500/50 text-red-400 hover:text-red-300 rounded text-[10px] uppercase font-bold transition disabled:opacity-50"
+                      >
+                        {sellingTicker === pos.ticker ? 'SELLING...' : 'SELL ALL'}
+                      </button>
                     </td>
                   </tr>
                 );
-              })}
-            </tbody>
-          </table>
-        )}
+              })
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

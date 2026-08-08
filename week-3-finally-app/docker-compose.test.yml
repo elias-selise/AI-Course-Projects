@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  finally-app-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: finally-app-test
+    environment:
+      - LLM_MOCK=true
+      - DB_PATH=/app/db/finally_test.db
+    expose:
+      - "8000"
+
+  e2e-tests:
+    image: mcr.microsoft.com/playwright:v1.42.1-jammy
+    container_name: finally-e2e-runner
+    depends_on:
+      - finally-app-test
+    working_dir: /e2e
+    volumes:
+      - ./test/e2e:/e2e
+    environment:
+      - BASE_URL=http://finally-app-test:8000
+    command: ["sh", "-c", "npm ci && npx playwright test"]

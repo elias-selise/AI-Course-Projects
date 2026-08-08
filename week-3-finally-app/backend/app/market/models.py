@@ -1,19 +1,11 @@
-from dataclasses import dataclass, asdict
-import json
-from datetime import datetime, timezone
+from typing import Literal
+from pydantic import BaseModel, Field
 
 
-@dataclass(frozen=True)
-class PriceUpdate:
+class PriceUpdate(BaseModel):
     ticker: str
     price: float
     previous_price: float
     timestamp: str
     change: float
-    direction: str  # "up", "down", "flat"
-
-    def to_dict(self) -> dict:
-        return asdict(self)
-
-    def to_json(self) -> str:
-        return json.dumps(self.to_dict())
+    direction: Literal["up", "down", "flat"]
