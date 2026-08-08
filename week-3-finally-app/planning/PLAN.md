@@ -54,11 +54,11 @@ The user runs a single Docker command (or a provided start script). A browser op
 │  FastAPI (Python/uv)                            │
 │  ├── /api/*          REST endpoints             │
 │  ├── /api/stream/*   SSE streaming              │
-│  └── /*              Static file serving         │
-│                      (Next.js export)            │
+│  └── /*              Static file serving        │
+│                      (Next.js export)           │
 │                                                 │
 │  SQLite database (volume-mounted)               │
-│  Background task: market data polling/sim        │
+│  Background task: market data polling/sim       │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -95,6 +95,8 @@ finally/
 ├── scripts/
 │   ├── start_mac.sh          # Launch Docker container (macOS/Linux)
 │   ├── stop_mac.sh           # Stop Docker container (macOS/Linux)
+│   ├── start_linux.sh        # Launch Docker container (Linux)
+│   ├── stop_linux.sh         # Stop Docker container (macOS/Linux)
 │   ├── start_windows.ps1     # Launch Docker container (Windows PowerShell)
 │   └── stop_windows.ps1      # Stop Docker container (Windows PowerShell)
 ├── test/                     # Playwright E2E tests + docker-compose.test.yml

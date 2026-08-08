@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: finally-app
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./db:/app/backend/db
+      - ./db:/app/db
+    env_file:
+      - .env
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - MASSIVE_API_KEY=${MASSIVE_API_KEY:-}
+      - LLM_MOCK=${LLM_MOCK:-false}
+    restart: unless-stopped
