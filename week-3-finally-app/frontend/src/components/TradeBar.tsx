@@ -1,202 +1,130 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
-import { Side, TickerData, Portfolio } from '../types';
-import { ArrowLeftRight, CheckCircle, AlertTriangle } from 'lucide-react';
+import { useTerminalStore } from '@/store/useTerminalStore';
+import { ShoppingCart, ArrowDownRight, ArrowUpRight } from 'lucide-react';
 
-interface TradeBarProps {
-  selectedTicker: string;
-  watchlist: TickerData[];
-  portfolio: Portfolio;
-  onExecuteTrade: (ticker: string, quantity: number, side: Side) => Promise<{ success: boolean; message: string }>;
-}
+export const TradeBar: React.FC = () => {
+  const { selectedTicker, executeTrade, portfolio } = useTerminalStore();
 
-export const TradeBar: React.FC<TradeBarProps> = ({
-  selectedTicker,
-  watchlist,
-  portfolio,
-  onExecuteTrade,
-}) => {
-  const [ticker, setTicker] = useState(selectedTicker || 'AAPL');
-  const [side, setSide] = useState<Side>('buy');
+  const [ticker, setTicker] = useState(selectedTicker);
   const [quantity, setQuantity] = useState<number>(1);
+  const [orderType, setOrderType] = useState<'MARKET'>('MARKET');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (selectedTicker) {
-      setTicker(selectedTicker);
-    }
+    setTicker(selectedTicker);
   }, [selectedTicker]);
 
-  const currentPrice = watchlist.find(t => t.ticker === ticker.toUpperCase())?.price || 150.0;
-  const totalCost = currentPrice * (quantity || 0);
-
-  // Position held for this ticker
-  const position = portfolio.positions.find(p => p.ticker === ticker.toUpperCase());
-  const ownedQty = position?.quantity || 0;
-
-  const handleQuickQty = (qty: number | 'MAX') => {
-    if (qty === 'MAX') {
-      if (side === 'buy') {
-        const maxBuy = Math.floor(portfolio.cash_balance / currentPrice);
-        setQuantity(Math.max(1, maxBuy));
-      } else {
-        setQuantity(Math.max(1, ownedQty));
-      }
-    } else {
-      setQuantity(qty);
+  const handleTrade = async (side: 'buy' | 'sell') => {
+    if (!ticker.trim() || quantity <= 0) {
+      setErrorMessage('Please enter a valid ticker and quantity > 0');
+      return;
     }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!ticker.trim() || quantity <= 0) return;
 
     setIsSubmitting(true);
-    setToast(null);
+    setErrorMessage(null);
+    setSuccessMessage(null);
 
-    const result = await onExecuteTrade(ticker.trim().toUpperCase(), quantity, side);
-
-    setIsSubmitting(false);
-
-    if (result.success) {
-      setToast({ type: 'success', message: result.message });
-    } else {
-      setToast({ type: 'error', message: result.message });
+    try {
+      await executeTrade(ticker.trim().toUpperCase(), side, Number(quantity));
+      setSuccessMessage(`Market ${side.toUpperCase()} order executed for ${quantity} sh of ${ticker.toUpperCase()}`);
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Trade execution failed');
+      setTimeout(() => setErrorMessage(null), 4000);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setTimeout(() => {
-      setToast(null);
-    }, 4000);
   };
 
   return (
-    <div className="bg-panel border border-border rounded p-3 select-none font-mono">
+    <div className="bg-terminal-card border border-terminal-border rounded-lg p-3 flex flex-col justify-between h-full">
       <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <ArrowLeftRight className="w-4 h-4 text-accent-yellow" />
-          <h2 className="text-xs font-bold uppercase tracking-wider text-accent-yellow">
-            INSTANT TRADE EXECUTION BAR
+        <div className="flex items-center space-x-2">
+          <ShoppingCart className="w-4 h-4 text-terminal-yellow" />
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-terminal-yellow">
+            Order Entry Trade Bar
           </h2>
         </div>
-        
-        <div className="text-[11px] text-gray-400">
-          {side === 'buy' ? (
-            <span>Avail Cash: <strong className="text-white">${portfolio.cash_balance.toFixed(2)}</strong></span>
-          ) : (
-            <span>Position Held: <strong className="text-white">{ownedQty} shares</strong></span>
-          )}
-        </div>
+        <span className="text-[10px] font-mono text-terminal-muted">
+          Available Cash: ${portfolio ? portfolio.cash_balance.toFixed(2) : '10,000.00'}
+        </span>
       </div>
 
-      <form onSubmit={handleSubmit} className="flex flex-wrap items-center gap-3">
-        {/* Side Selector (BUY / SELL Toggle) */}
-        <div className="flex rounded bg-black/50 p-1 border border-border">
-          <button
-            type="button"
-            data-testid="buy-button"
-            onClick={() => setSide('buy')}
-            className={`px-3 py-1 text-xs font-bold rounded transition-colors ${
-              side === 'buy'
-                ? 'bg-emerald-600 text-white shadow'
-                : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            BUY
-          </button>
-          <button
-            type="button"
-            data-testid="sell-button"
-            onClick={() => setSide('sell')}
-            className={`px-3 py-1 text-xs font-bold rounded transition-colors ${
-              side === 'sell'
-                ? 'bg-rose-600 text-white shadow'
-                : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            SELL
-          </button>
-        </div>
-
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 items-center">
         {/* Ticker Input */}
-        <div className="flex flex-col">
-          <label className="text-[10px] text-gray-400 mb-0.5">SYMBOL</label>
+        <div>
+          <label className="block text-[10px] uppercase text-terminal-muted mb-0.5">Ticker</label>
           <input
             type="text"
-            data-testid="trade-ticker-input"
             value={ticker}
             onChange={(e) => setTicker(e.target.value.toUpperCase())}
+            className="w-full px-2 py-1 text-xs font-mono bg-terminal-bg border border-terminal-border rounded text-white focus:outline-none focus:border-terminal-blue uppercase"
             placeholder="TICKER"
-            className="w-24 px-2 py-1 bg-black/60 border border-border rounded text-xs font-bold text-white uppercase focus:outline-none focus:border-accent-blue"
           />
         </div>
 
-        {/* Quantity Input & Preset Buttons */}
-        <div className="flex flex-col">
-          <label className="text-[10px] text-gray-400 mb-0.5">QUANTITY</label>
-          <div className="flex items-center gap-1">
-            <input
-              type="number"
-              data-testid="trade-quantity-input"
-              min="1"
-              step="1"
-              value={quantity || ''}
-              onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 0))}
-              className="w-20 px-2 py-1 bg-black/60 border border-border rounded text-xs font-bold text-white focus:outline-none focus:border-accent-blue"
-            />
-            <div className="flex items-center gap-0.5">
-              {[1, 5, 10, 'MAX'].map((preset) => (
-                <button
-                  key={preset.toString()}
-                  type="button"
-                  onClick={() => handleQuickQty(preset as any)}
-                  className="px-1.5 py-0.5 rounded bg-gray-800 text-[10px] text-gray-300 hover:bg-gray-700 border border-border"
-                >
-                  {preset}
-                </button>
-              ))}
-            </div>
-          </div>
+        {/* Quantity Input */}
+        <div>
+          <label className="block text-[10px] uppercase text-terminal-muted mb-0.5">Quantity</label>
+          <input
+            type="number"
+            min="1"
+            value={quantity}
+            onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+            className="w-full px-2 py-1 text-xs font-mono bg-terminal-bg border border-terminal-border rounded text-white focus:outline-none focus:border-terminal-blue"
+          />
         </div>
 
-        {/* Estimated Order Cost */}
-        <div className="flex flex-col min-w-[120px]">
-          <label className="text-[10px] text-gray-400 mb-0.5">EST. ORDER VALUE</label>
-          <div className="text-xs font-bold text-accent-yellow py-1">
-            ${totalCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            <span className="text-[10px] text-gray-500 font-normal ml-1">(@ ${(currentPrice ?? 0).toFixed(2)})</span>
-          </div>
+        {/* Order Type */}
+        <div>
+          <label className="block text-[10px] uppercase text-terminal-muted mb-0.5">Order Type</label>
+          <select
+            value={orderType}
+            onChange={(e) => setOrderType(e.target.value as 'MARKET')}
+            className="w-full px-2 py-1 text-xs font-mono bg-terminal-bg border border-terminal-border rounded text-white focus:outline-none focus:border-terminal-blue"
+          >
+            <option value="MARKET">MARKET</option>
+          </select>
         </div>
 
-        {/* Submit Execution Button */}
-        <button
-          type="submit"
-          data-testid="execute-trade-button"
-          disabled={isSubmitting || quantity <= 0}
-          className={`ml-auto px-5 py-2 rounded text-xs font-bold font-mono tracking-wider transition-all flex items-center gap-2 ${
-            side === 'buy'
-              ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/30'
-              : 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-900/30'
-          } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
-        >
-          {isSubmitting ? (
-            <span className="animate-spin">⏳</span>
-          ) : (
-            <span>EXECUTE {side.toUpperCase()} {quantity} {ticker}</span>
+        {/* Action Buttons */}
+        <div className="flex space-x-1.5 pt-3">
+          <button
+            onClick={() => handleTrade('buy')}
+            disabled={isSubmitting}
+            className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-xs font-bold rounded flex items-center justify-center space-x-1 transition disabled:opacity-50"
+          >
+            <ArrowUpRight className="w-3.5 h-3.5" />
+            <span>BUY</span>
+          </button>
+          <button
+            onClick={() => handleTrade('sell')}
+            disabled={isSubmitting}
+            className="flex-1 py-1.5 bg-red-600 hover:bg-red-500 text-white font-mono text-xs font-bold rounded flex items-center justify-center space-x-1 transition disabled:opacity-50"
+          >
+            <ArrowDownRight className="w-3.5 h-3.5" />
+            <span>SELL</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Error & Success Toasts */}
+      {(errorMessage || successMessage) && (
+        <div className="mt-2">
+          {errorMessage && (
+            <p className="text-[10px] font-mono text-red-400 bg-red-500/10 border border-red-500/30 px-2 py-0.5 rounded">
+              {errorMessage}
+            </p>
           )}
-        </button>
-      </form>
-
-      {/* Execution Toast / Banner */}
-      {toast && (
-        <div
-          className={`mt-2.5 px-3 py-1.5 rounded text-xs flex items-center gap-2 border font-mono animate-pulse ${
-            toast.type === 'success'
-              ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300'
-              : 'bg-rose-950/80 border-rose-500 text-rose-300'
-          }`}
-        >
-          {toast.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
-          <span>{toast.message}</span>
+          {successMessage && (
+            <p className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded">
+              {successMessage}
+            </p>
+          )}
         </div>
       )}
     </div>

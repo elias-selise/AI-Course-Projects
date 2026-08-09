@@ -126,7 +126,7 @@ const AIChatSidebarComponent: React.FC<AIChatSidebarProps> = ({
                   </>
                 )}
                 <span className="text-[9px] opacity-60" suppressHydrationWarning>
-                  {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {new Date(msg.timestamp || msg.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
 

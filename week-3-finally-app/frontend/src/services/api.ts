@@ -333,7 +333,9 @@ export async function sendChatMessage(message: string): Promise<ChatResponse> {
       watchlist_changes.push({ ticker, action: 'add' });
       reply = `Added ${ticker} to your watchlist. You can now monitor its live price fluctuations and sparkline history.`;
     } else if (lower.includes('performance') || lower.includes('portfolio') || lower.includes('analyze')) {
-      reply = `Your portfolio currently holds $${mockPortfolioState.cash_balance.toFixed(2)} in cash and $${(mockPortfolioState.total_value - mockPortfolioState.cash_balance).toFixed(2)} in active positions. Total unrealized P&L is ${mockPortfolioState.unrealized_pnl >= 0 ? '+' : ''}$${mockPortfolioState.unrealized_pnl.toFixed(2)} (${mockPortfolioState.unrealized_pnl_pct.toFixed(2)}%). Top allocation is currently NVDA.`;
+      const pnl = mockPortfolioState.unrealized_pnl ?? 0;
+      const pnlPct = mockPortfolioState.unrealized_pnl_pct ?? 0;
+      reply = `Your portfolio currently holds $${mockPortfolioState.cash_balance.toFixed(2)} in cash and $${(mockPortfolioState.total_value - mockPortfolioState.cash_balance).toFixed(2)} in active positions. Total unrealized P&L is ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} (${pnlPct.toFixed(2)}%). Top allocation is currently NVDA.`;
     }
 
     return {

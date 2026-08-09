@@ -20,8 +20,8 @@ export const MainChartArea: React.FC<MainChartAreaProps> = ({ tickerData, positi
     );
   }
 
-  const { ticker, name, price, change_pct, history = [] } = tickerData;
-  const isUp = change_pct >= 0;
+  const { ticker, name, price, change_pct = 0, history = [] } = tickerData;
+  const isUp = (change_pct ?? 0) >= 0;
 
   // Build chart coordinates
   const prices = history.length > 0 ? history : [price * 0.98, price * 0.99, price, price * 1.01, price];

@@ -114,7 +114,8 @@ export const WatchlistPanel: React.FC<WatchlistPanelProps> = ({
       <div className="flex-1 overflow-y-auto divide-y divide-border/40 font-mono">
         {watchlist.map((item) => {
           const isSelected = item.ticker === selectedTicker;
-          const isUp = item.change_pct >= 0;
+          const changePct = item.change_pct ?? 0;
+          const isUp = changePct >= 0;
           const flash = flashMap[item.ticker];
 
           let flashClass = '';
